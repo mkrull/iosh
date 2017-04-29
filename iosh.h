@@ -8,6 +8,8 @@
 
 enum {
   SHVAL_NUM,
+  SHVAL_SYM,
+  SHVAL_SEXPR,
   SHVAL_ERR
 };
 enum {
@@ -19,14 +21,23 @@ enum {
 typedef struct {
   int type;
   long num;
-  int err;
+  char* err;
+  char* sym;
+  int count;
+  struct shval** cell;
 } shval;
 
-shval shval_num(long n);
-shval shval_err(int e);
+shval* shval_num(long n);
+shval* shval_err(char* e);
+shval* shval_sym(char* s);
+shval* shval_sexpr(void);
 
-shval eval_op(shval x, char* op, shval y);
-shval eval(mpc_ast_t* ast);
+void shval_free(shval* v);
 
-void shval_print(shval v);
-void shval_println(shval v);
+shval* shval_read_num(mpc_ast_t* ast);
+shval* shval_add(shval* v, shval* a);
+shval* shval_read(mpc_ast_t* ast);
+
+void shval_expr_print(shval* v, char open, char close);
+void shval_print(shval* v);
+void shval_println(shval* v);

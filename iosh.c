@@ -3,107 +3,151 @@
 #define prompt "iosh> "
 #define exit_cmd "exit"
 
-shval shval_num(long n) {
-  shval v;
-  v.type = SHVAL_NUM;
-  v.num = n;
+shval* shval_num(long n) {
+  shval* v = malloc(sizeof(shval));
+  v->type = SHVAL_NUM;
+  v->num = n;
   return v;
 }
 
-shval shval_err(int e) {
-  shval v;
-  v.type = SHVAL_ERR;
-  v.err = e;
+shval* shval_err(char* e) {
+  shval* v = malloc(sizeof(shval));
+  v->type = SHVAL_ERR;
+  v->err = malloc(strlen(e) + 1);
+  strcpy(v->err, e);
   return v;
 }
 
-void shval_print(shval v) {
-  switch (v.type) {
+shval* shval_sym(char* s) {
+  shval* v = malloc(sizeof(shval));
+  v->type = SHVAL_SYM;
+  v->sym = malloc(strlen(s) + 1);
+  strcpy(v->sym, s);
+  return v;
+}
+
+shval* shval_sexpr(void) {
+  shval* v = malloc(sizeof(shval));
+  v->type = SHVAL_SEXPR;
+  v->count = 0;
+  v->cell = NULL;
+  return v;
+}
+
+void shval_free(shval* v) {
+  switch (v->type) {
+  case SHVAL_NUM: {
+    break;
+  }
+  case SHVAL_ERR: {
+    free(v->err);
+    break;
+  }
+  case SHVAL_SYM: {
+    free(v->sym);
+    break;
+  }
+  case SHVAL_SEXPR: {
+    for (int i = 0; i < v->count; i++) {
+      shval_free(v->cell[i]);
+    }
+    free(v->cell);
+    break;
+  }
+  }
+  free(v);
+}
+
+shval* shval_read_num(mpc_ast_t* ast) {
+  errno = 0;
+  long x = strtol(ast->contents, NULL, 10);
+  return errno != ERANGE ? shval_num(x) : shval_err("Invalid number");
+}
+
+shval* shval_add(shval* v, shval* a) {
+  v->count++;
+  v->cell = realloc(v->cell, sizeof(shval*) * v->count);
+  v->cell[v->count - 1] = a;
+  return v;
+}
+
+shval* shval_read(mpc_ast_t* ast) {
+  if (strstr(ast->tag, "number")) {
+    return shval_read_num(ast);
+  }
+  if (strstr(ast->tag, "symbol")) {
+    return shval_sym(ast->contents);
+  }
+
+  shval* v = NULL;
+  if (strcmp(ast->tag, ">") == 0) {
+    v = shval_sexpr();
+  }
+  if (strstr(ast->tag, "sexpr")) {
+    v = shval_sexpr();
+  }
+
+  for (int i = 0; i < ast->children_num; i++) {
+    if (strcmp(ast->children[i]->contents, "(") == 0) { continue; }
+    if (strcmp(ast->children[i]->contents, ")") == 0) { continue; }
+    if (strcmp(ast->children[i]->tag, "regex") == 0) { continue; }
+    v = shval_add(v, shval_read(ast->children[i]));
+  }
+
+  return v;
+}
+
+void shval_expr_print(shval* v, char open, char close) {
+  putchar(open);
+  for (int i = 0; i < v->count; i++) {
+    shval_print(v->cell[i]);
+    if (i != (v->count - 1)) {
+      putchar(' ');
+    }
+  }
+  putchar(close);
+}
+
+void shval_print(shval* v) {
+  switch (v->type) {
   case SHVAL_NUM:
-    printf("%li", v.num);
+    printf("%li", v->num);
     break;
   case SHVAL_ERR:
-    switch (v.err) {
-    case SHERR_BAD_NUM:
-      printf("Error: Invalid number.");
-      break;
-    case SHERR_BAD_OP:
-      printf("Error: Invalid operator.");
-      break;
-    case SHERR_DIV_ZERO:
-      printf("Error: Division by zero.");
-      break;
-    }
+    printf("Error: %s.", v->err);
+    break;
+  case SHVAL_SYM:
+    printf("%s", v->sym);
+    break;
+  case SHVAL_SEXPR:
+    shval_expr_print(v, '(', ')');
     break;
   }
 }
 
-void shval_println(shval v) {
+void shval_println(shval* v) {
   shval_print(v);
   printf("\n");
 }
 
-shval eval_op(shval x, char* op, shval y) {
-  // return value if either of values is an error
-  if (x.type == SHVAL_ERR) {
-    return x;
-  }
-  if (y.type == SHVAL_ERR) {
-    return y;
-  }
-
-  if (strncmp(op, "+", 1) == 0) { return shval_num(x.num + y.num); }
-  if (strncmp(op, "-", 1) == 0) { return shval_num(x.num - y.num); }
-  if (strncmp(op, "*", 1) == 0) { return shval_num(x.num * y.num); }
-  if (strncmp(op, "/", 1) == 0) {
-    if (y.num == 0) {
-      return shval_err(SHERR_DIV_ZERO);
-    }
-    return shval_num(x.num / y.num);
-  }
-
-  return shval_num(0);
-}
-
-shval eval(mpc_ast_t* ast) {
-  // return number
-  if (strstr(ast->tag, "number")) {
-    errno = 0;
-    long n = strtol(ast->contents, NULL, 10);
-    return errno != ERANGE ? shval_num(n) : shval_err(SHERR_BAD_NUM);
-  }
-
-  // operator is the second child
-  char* op = ast->children[1]->contents;
-
-  // store evaluated 3rd child in num
-  shval val = eval(ast->children[2]);
-
-  // iterate over remaining expressions
-  int i = 3;
-  while (strstr(ast->children[i]->tag, "expr")) {
-    val = eval_op(val, op, eval(ast->children[i]));
-    i++;
-  }
-
-  return val;
-}
-
 int main() {
   mpc_parser_t *Number = mpc_new("number");
-  mpc_parser_t *Operator = mpc_new("operator");
+  mpc_parser_t *Symbol = mpc_new("symbol");
+  mpc_parser_t *Sexpr = mpc_new("sexpr");
   mpc_parser_t *Expr = mpc_new("expr");
   mpc_parser_t *IOSh = mpc_new("iosh");
 
   mpca_lang(MPCA_LANG_DEFAULT,
            " \
-             number   : /-?[0-9]+/ ;                            \
-             operator : '+' | '-' | '*' | '/' ;                 \
-             expr     : <number> | '(' <operator> <expr>+ ')' ; \
-             iosh     : /^/ <operator> <expr>+ /$/ ;            \
+             number    : /-?[0-9]+/ ;                   \
+             symbol    : '+' | '-' | '*' | '/' ;        \
+             sexpr     : '(' <expr>* ')' ;              \
+             expr      : <number> | <symbol> | <sexpr> ; \
+             iosh      : /^/ <expr>* /$/ ;               \
            ",
            Number,
-           Operator,
+           Symbol,
+           Sexpr,
            Expr,
            IOSh);
 
@@ -118,8 +162,9 @@ int main() {
 
     mpc_result_t res;
     if (mpc_parse("<stdin>", input, IOSh, &res)) {
-      shval result = eval(res.output);
+      shval* result = shval_read(res.output);
       shval_println(result);
+      shval_free(result);
       mpc_ast_delete(res.output);
     } else {
       mpc_err_print(res.error);
@@ -129,7 +174,7 @@ int main() {
     free(input);
   }
 
-  mpc_cleanup(4, Number, Operator, Expr, IOSh);
+  mpc_cleanup(4, Number, Symbol, Sexpr, Expr, IOSh);
 
   return 0;
 }
