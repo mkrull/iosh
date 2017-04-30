@@ -10,6 +10,7 @@ enum {
   SHVAL_NUM,
   SHVAL_SYM,
   SHVAL_SEXPR,
+  SHVAL_QEXPR,
   SHVAL_ERR
 };
 enum {
@@ -18,26 +19,41 @@ enum {
   SHERR_BAD_NUM
 };
 
-typedef struct {
+typedef struct shval shval;
+typedef struct shval {
   int type;
   long num;
   char* err;
   char* sym;
   int count;
-  struct shval** cell;
+  shval** cell;
 } shval;
 
-shval* shval_num(long n);
-shval* shval_err(char* e);
-shval* shval_sym(char* s);
+shval* shval_num(long);
+shval* shval_err(char*);
+shval* shval_sym(char*);
 shval* shval_sexpr(void);
+shval* shval_qexpr(void);
 
-void shval_free(shval* v);
+void shval_free(shval*);
 
-shval* shval_read_num(mpc_ast_t* ast);
-shval* shval_add(shval* v, shval* a);
-shval* shval_read(mpc_ast_t* ast);
+shval* shval_read_num(mpc_ast_t*);
+shval* shval_add(shval*, shval*);
+shval* shval_read(mpc_ast_t*);
+shval* shval_pop(shval*, int);
+shval* shval_take(shval*, int);
 
-void shval_expr_print(shval* v, char open, char close);
-void shval_print(shval* v);
-void shval_println(shval* v);
+void shval_expr_print(shval*, char, char);
+void shval_print(shval*);
+void shval_println(shval*);
+
+shval* builtin(shval*, char*);
+shval* builtin_list(shval*);
+shval* builtin_join(shval*);
+shval* builtin_head(shval*);
+shval* builtin_tail(shval*);
+shval* builtin_eval(shval*);
+shval* builtin_op(shval*, char*);
+
+shval* shval_eval_sexpr(shval*);
+shval* shval_eval(shval*);
