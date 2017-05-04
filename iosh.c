@@ -290,6 +290,31 @@ shval* builtin_list(shval* v) {
   return v;
 }
 
+shval* shval_join(shval* v, shval* x) {
+  while (x->count) {
+    v = shval_add(v, shval_pop(x, 0));
+  }
+
+  shval_free(x);
+  return v;
+}
+
+shval* builtin_join(shval* v) {
+  for (int i = 0; i < v->count; i++) {
+    shassert(v, v->cell[i]->type == SHVAL_QEXPR,
+             "Function 'join' passed incorrect type.");
+  }
+
+  shval* a = shval_pop(v, 0);
+
+  while (v->count) {
+    a = shval_join(a, shval_pop(v, 0));
+  }
+
+  shval_free(v);
+  return a;
+}
+
 shval* builtin_eval(shval* v) {
   shassert(v,
            v->count == 1,
@@ -303,6 +328,10 @@ shval* builtin_eval(shval* v) {
   return shval_eval(a);
 }
 
+void builtin_exit(int code) {
+  exit(code);
+}
+
 shval* builtin(shval* v, char* op) {
   if (strcmp("list", op) == 0) {
     return builtin_list(v);
@@ -313,8 +342,14 @@ shval* builtin(shval* v, char* op) {
   if (strcmp("tail", op) == 0) {
     return builtin_tail(v);
   }
+  if (strcmp("join", op) == 0) {
+    return builtin_join(v);
+  }
   if (strcmp("eval", op) == 0) {
-    return builtin_eval(v);
+    builtin_eval(v);
+  }
+  if (strcmp(exit_cmd, op) == 0) {
+    builtin_exit(0);
   }
   if (strstr("+-*/", op)) {
     return builtin_op(v, op);
@@ -363,15 +398,10 @@ int main() {
   while (1) {
     char *input = readline(prompt);
     add_history(input);
-    if (strncmp(input, exit_cmd, sizeof(exit_cmd)) == 0) {
-      exit(0);
-    }
 
     mpc_result_t res;
     if (mpc_parse("<stdin>", input, IOSh, &res)) {
       shval* t = shval_read(res.output);
-      puts("Debug: ");
-      shval_println(t);
       shval* result = shval_eval(t);
       shval_println(result);
       shval_free(result);

@@ -42,6 +42,7 @@ shval* shval_add(shval*, shval*);
 shval* shval_read(mpc_ast_t*);
 shval* shval_pop(shval*, int);
 shval* shval_take(shval*, int);
+shval* shval_join(shval*, shval*);
 
 void shval_expr_print(shval*, char, char);
 void shval_print(shval*);
@@ -54,6 +55,7 @@ shval* builtin_head(shval*);
 shval* builtin_tail(shval*);
 shval* builtin_eval(shval*);
 shval* builtin_op(shval*, char*);
+void builtin_exit(int);
 
 shval* shval_eval_sexpr(shval*);
 shval* shval_eval(shval*);
